@@ -73,6 +73,8 @@
 	
 ### Distributed Ledger ###
 	* is a combination of the two components, world state *database* and the transaction log *history*.
+	* single ledger can have one or more smart contracts.
+	* legder physically hosted on Peer, but logically hosted on the channel.
 	* 1)world state database
 		* describes the state of the ledger at a given point in time.
 		* it’s the database of the ledger.
@@ -103,16 +105,37 @@
 	
 	
 ### Peer ###
+	* Every peer node in a channel is a *committing peer*.
+	* to actually be an *endorsing peer*, the smart contract on the peer must be used by a client application to generate a 	  digitally signed transaction response.
+	* When an organization has multiple peers in a channel, a *leader peer* is a node which takes responsibility for 		  distributing blocks of transactions from the orderer to the other committing peers in the organization.
+	* If a peer in one organization needs to communicate with a peer in another organization, then it can use one of the 		  anchor peers defined in the channel configuration for that organization.
+	* anchor peer can help with many different cross-organization communication scenarios.
+	* a peer can be a committing peer, endorsing peer, leader peer and anchor peer all at the same time!
+	* Only the anchor peer is optional.
+	* for all practical purposes, there will always be a leader peer and at least one endorsing peer and at least one 		  committing peer.
+	* each peer node (belongs to one org.)in a channel uses the copy of Channel Configuration to determine the operations that 		  respective organizations` client applications can perform.
+	* each peer maintains a copy of the channel configuration for each channel of which they are a member. 
+	* Once Peer is started, it can join channel using the *orderer* by raising the join request to orderer.
 	* each peer maintains a copy of the ledger for each channel of which they are a member.
-	* validate transactions against endorsement policies and enforce the policies.
-	* Prior to appending a block (commit to ledger) after validating the transactions, a versioning check is performed to 		  ensure that states for assets that were read have not changed since chaincode execution time. (protection against the 	  double spend)
+	* single peer can host one or more ledgers.
+	* peer can install one or more smart contracts in a single ledger.
+	* peers and orderers can communicate with each other using channel.
+	* peer can only run a smart contract and further can take part in the process of transaction endorsement if it is 		  installed on it, but it can know about the interface of a smart contract by being connected to a channel.
+	* validate transactions by verifying the transaction signatures against endorsement policies and enforce the policies.
+	* Prior to appending a block (commit to ledger) after validating the transactions, a versioning check is performed to 		  ensure that states for assets that were read have not changed since chaincode execution time. (protection against the 	  double spend).
+	* At each of the committing peers, distributed transactions from orderers are recorded, whether valid or invalid, and 		  their local copy of the ledger updated appropriately.
 		
 		
 		
 ### Smart Contracts ###
 	* business logic of a blockchain application.
 	* functions as a trusted distributed application.
+	* are used to generate transactions.
+	* more no. of smart contracts are packaged into a *chaincode*.
+	* *chaincode package* must have been installed on *peers* by an administrator of the (respective peer) organization, and 		  then defined on a *channel*.
+	* installing a smart contract shows how we think of it being *physically hosted* on a peer, whereas a smart contract that 		  has been defined on a channel shows how we consider it *logically hosted* by the channel.
 	* State transitions are a result of chaincode invocations, recorded as transactions.
+	* X.509 certificates are used in smart contract (transaction responses) to digitally sign transactions.
 	* invoked by an application external to the blockchain when that application needs to interact with the ledger.
 	* chaincode interacts only with the database component of the ledger, the world state (querying it, for example), and not 		  the transaction log.
 	* many smart contracts run concurrently in the network
@@ -123,14 +146,75 @@
 	
 	
 	
+### Orderers ###
+	* orderers, service as a *network administration point* for the fabric network.
+	* When orderers receives join request from peers, it uses the *channel configuration* to determine Peer’s permissions on 		  the requeted channel.
+	* orderer is initially configured and started by an administrators (of anyone org.) according to a *network configuration*.
+	* ordering service node (for eg,O4) is the actor that creates consortia(for eg,2) and channels.
+#	* uses the *system channel* ((system channel is connected to *network configuration*)).
+	* orderer(s) must be hosted by any one (or more) of the organization in a network as per *network configuration*.(2 points)
+	* also supports application channels, for the purposes of transaction ordering into blocks for distribution.
+	* it can order transactions for one or more application channels.
+	* ordering service node (for eg,O4) has a copy of the network configuration, but in a *multi-node configuration*, every 	  ordering service node will have its own copy of the network configuration.
+	* ordering service node is the distribution point for transactions.
+	* ordering service node gathers endorsed transactions from applications and orders them into transaction blocks, which are 		  subsequently distributed to every peer node in the channel.
+	* Two roles for single orderer:
+		* at the channel level, orderer role is to gather transactions and distribute blocks inside channel according to 			  the policies defined in channel configuration.
+		* at the network level, orderer role is to provide a management point for network resources according to the 			  policies defined in network configuration.
+		* Notice again how these roles are defined by different policies within the channel and network configurations 			  respectively.
+	* Whether acting as a network management point, or as a distributor of blocks in a channel, its nodes(orderers) can be 		  distributed as required throughout the multiple organizations in a network.
+#	* ordering service nodes operate a mini-blockchain, connected via the *system channel*.
+	
+	
+	
+### Organization ###
+	* every organizations in a n/w has a preferred Certificate Authority.
+	* administrative rights of organization is decided by the *network configuration*.
+	* When an organization has multiple peers in a channel, it can choose the peers upon which it installs smart contracts; it 		  does not need to install a smart contract on every peer.
+	* approval of a chaincode definition occurs at the organization level.
+	* A sufficient number of organizations (orgs administrator) need to approve a chaincode definition(not transactions 		  generated by the smart contracts) (A majority, by default) before the chaincode definition can be committed to the 		  channel and used to interact with the channel ledger. 
+	* organization’s peers can have one or more leaders connected to the ordering service to improve resilience and scalability
+	* An organization can have zero or more anchor peers defined for it.
+	* Every organization has their own set of peers.
+	* every organization has client applications.
+	* A new organization(suppose, if added in a channel) can use the chaincode as soon as they approve the chaincode 		  parameters already agreed to by other members of the channel and then installs the chaincode package. 
+	* A newly added organization in a channel can approve the chaincode definition once and join multiple peers to the channel 		  with the chaincode package installed.
+	* if a newly added organization in a channel, wanted to change the chaincode definition, all members of a channel would 	  need to approve a new definition for their organization, and then one of the organizations would need to commit the 		  definition to the channel.
+	
+	
+	
+### Certificate Authority CA ###
+	* is used to dispense X.509 digital certificates which acts as a identities to the administrators, network nodes, etc... 
+	* can also be used to sign transactions.
+	* it has a built-in CA called *Fabric-CA*
+	
+	
+### Applications ###
+	* applications can connect to both peers and orderers by using the channel.
+	* single application of one organization can connect to one or more channels as per respective channel config in a network.
+	* organisations maintain the client applications.
+	* X.509 certificates are used in client application (transaction proposals). 
+	* client application will have an identity that associates it with an organization.
+	* client application can invoke smart contracts, Once the chaincode definition has been committed to the channel.
+	* Client applications send transaction proposals (serves as input to the smart contract) to peers owned by an organization 		  specified by the smart contract endorsement policy, which uses it to generate an endorsed transaction response, which is 		  returned by the peer node to the client application. (process called as Smart Contract Invocation)
+	
+	
+	
 	
 	
 ### Channels ###
+	* Only network administrators (organization(s)) as defined in network configuration policy, can able to create new channel.
 	* channels keep *transactions* private from the broader network.
+	* channels can serve for one or more applications.
+	* channel must have atleast one orderer to order trasactions.
+	* any updates to network configuration after creation of channels will have no direct effect on channel configuration.
 	* participants on a Fabric network establish a sub-network where every member has visibility to a particular set of 		  transactions.
 	* only those nodes that participate in a channel have access to the smart contract (chaincode) and data transacted, 		  preserving the privacy and confidentiality of both.
 	* allowing a group of participants to create a separate ledger of transactions.
+	* data in a channel is completely isolated from the rest of the network, including other channels.
 	* One Ledger per Channel.
+	* there can be multiple channels in a network.
+	* channel can have any number of organizations connected to it.
 	* channel’s ledger contains a configuration block defining policies, access control lists, and other pertinent information.
 	* contain Membership Service Provider instances allowing for crypto materials to be derived from different certificate 		  authorities.
 	
@@ -146,6 +230,7 @@
 	
 	
 ### Membership Service Provider MSP ###
+	* mapping of X.509 digital certificates to member organizations is achieved by via a structure called a (MSP).
 	* members of a Hyperledger Fabric network enroll through a trusted MSP.
 	
 	
@@ -165,7 +250,85 @@
 ### Ordering Service ###
 	* currently offering a CFT ordering service implementation based on the *etcd* library of the Raft protocol.
 	* network can have multiple ordering services (like CFT or BFT in same n/w) supporting different applications or 		  application requirements. (Note this point: which is different from multiple orderer organizations having orderers like 	    CFT1,CFT2,etc for a single ordering service like CFT for a single application requirements.)
+	
+	
+	
+### Consortium ###
+	* consortium defines the set of organizations in the network who share a need to *transact* with one another.
+	* It really makes sense to group organizations together as a single consortium if they have a common goal,
+	* can have any number of organizational members.
+	* Only network administrators (organization(s)) as defined in network configuration, can able to create new consortia.
+	* Every consortium has a single channel for their organizational members in a consortium.
+	* consortium definition, by network administrator, is stored in the network configuration.
+	
+	
+	
+### Declarative Policies ###
+	* how organizations manage network evolution.
+	
+	
+### Chaincode Definition ###
+	* a set of parameters that establish how a chaincode will be used on a channel.
+	* it has endorsement policy for a smart contract ( describes which organizations` peer should digitally sign a generated 		  transaction(not a chaincode) before they will be accepted by other organizations(committing peer’s) onto their copy of 		  the ledger.).
+	* Committing the chaincode definition to the channel, places the endorsement policy on the channel ledger.
 
+
+
+### Fabric Network Governance ###
+	* network is governed according to policy rules specified in *network configuration*.
+	* newtork can be controlled by one or more organizations.
+	
+	
+	
+### Network Configuration (policy) ###
+	* defines the configuration settings for the orderer.
+	* defines consortium definition.
+	* N/W Config. policy can be considered more important than Orderers because, ultimately, it controls network access.
+	* it gives administrative rights to organization.
+	* it contains the policies that describe the starting set of administrative capabilities for the network.
+	* it may change later due to addition or removal of the members of the fabric network.
+	* if consortia definition is changed in n/w configuration, it will not affect the members of channel after creation of 		  channels.
+	* policy which separates organizations that can manage resources at the network level.
+	* channel configurations remain completely separate from each other, and completely separate from the network configuration
+	* each node in the ordering service records each channel in the network configuration, so that there is a record of each 	   channel created, at the network level.
+	* Although ordering service node creates consortia and channels, the *intelligence* of the network is contained in the 		  *network configuration* that Ordering services(orderers) is obeying.
+#	* *network configuration transactions* are used to co-operatively maintain a consistent copy of the network configuration 		  at each ordering service node. 
+	
+	
+	
+### Application Channel Governance ###
+	* channel is governed according to the *policy rules* specified in *channel configuration*.
+	* channel (channel configuration) can be controlled by one or more organizations (org`	s peers, must be member of the 		  channel).
+	* Channel configuration determines which & how many peers in channel can read and/or write information to channel ledger.
+	* administrating organization(s) has *no rights* in channel configuration.
+	* administrating organization(s) cannot add itself to the *channel*, must be authorized by channel members as per channel 		  configuration.
+	* anchor peers for one org. in a channel are defined in the channel configuration for that organization(communicating org. 		  or from org.).
+	* organization(s) who can manage resources at the channel level.
+	
+	
+	
+	
+### Modification Policy or mod_policy ###
+	* is a first class policy within a network or channel configuration that manages change. 
+	* The key point of understanding is that policy change in a network or channel configuration is managed by a policy 		  (mod_policy) within the respective policy itself.
+	* a uniquely powerful policy that allows network and channel administrators to manage policy change itself.
+	* mod_policy defines a set of organizations that are allowed to change the mod_policy itself.
+	* organization(s) defined in the mod_policy inside n/w configuration policy is responsible for *Configuration Changes*
+	* mod_policy can be configured in such a way that all organization defined in mod_policy would have to approve the change.
+	* Note that separate mod_policy for both n/w & channel configuration policies within the policies respectively. 
+	
+	
+	
+	
+### Modification of Network and/or Channel Configuration Policy ###
+#	* Respective Orgs` administrator must submit a *Configuration Transaction* to change the network or channel configuration.
+#	* *Configuration Transaction* must be signed by the organizations identified in the appropriate policy(**mod_policy**) as 		  being responsible for configuration change.	
+#	* Using the system channel, ordering service nodes(multiple orderers) distribute *network configuration transactions*.
+	
+	
+	
+### Gossip Protocol ###
+	* the technical mechanism by which peers within an individual organization efficiently discover and communicate with each 		  other when an organization have large number of peer nodes.
 
 
 ###################################################################################################
@@ -231,6 +394,9 @@
 ### Encryption of Transactions ###
 	* To further obfuscate the data, values within chaincode can be encrypted (in part or in total) using common cryptographic 		  algorithms such as AES before sending transactions to the ordering service and appending blocks to the ledger. Once 		  encrypted data has been written to the ledger, it can be decrypted only by a user in possession of the corresponding key 		  that was used to generate the cipher text.
 	
+### Separation & collaboration b/w organizations ###
+	* This is a very powerful concept – channels provide both a mechanism for the separation of organizations, and a mechanism 		  for collaboration between organizations. All the while, this infrastructure is provided by, and shared between, a set of 		  independent organizations.
+	
 	
 ### D/B Channel and Private Data Collections ###
 	* channels keep transactions private from the broader network whereas collections keep data private between subsets of 		  organizations on the channel.
@@ -258,9 +424,37 @@
 
 
 #################################################     *Topics*    #################################
+### System channel & Application Channel ###
+	* Both network and channel configurations are kept consistent using the same blockchain technology that is used for user 		  transactions – but for configuration transactions. To change a network or channel configuration, an administrator must 		  submit a configuration transaction to change the network or channel configuration. It must be signed by organizations 	  identified in the appropriate policy as being responsible for configuration change. This policy is called the mod_policy 		  and we’ll discuss it later.
+	* Indeed, the ordering service nodes operate a mini-blockchain, connected via the system channel we mentioned earlier. 		  Using the system channel ordering service nodes distribute network configuration transactions. These transactions are 	  used to co-operatively maintain a consistent copy of the network configuration at each ordering service node. In a 		  similar way, peer nodes in an application channel can distribute channel configuration transactions. Likewise, these 		  transactions are used to maintain a consistent copy of the channel configuration at each peer node.
+	
+	
+	
 ### Importance of Consensus ###
 	* consensus is not merely limited to the agreed upon order of a batch of transactions; rather, it is an overarching 		  characterization that is achieved as a byproduct of the ongoing verifications that take place during a transaction’s 		  journey from proposal to commitment.
-
+	
+	
+### Formation of Blockchain Network ###
+	* In most cases, multiple organizations come together as a consortium to form the network and their permissions are 		  determined by a set of policies that are agreed by the consortium when the network is originally configured. Moreover, 		  network policies can change over time subject to the agreement of the organizations in the consortium, as we’ll discover 		  when we discuss the concept of modification policy.
+	
+	
+### careful addition of peers ###
+	* more peers in a network will allow more applications to connect to it; and multiple peers in an organization will 		  provide extra resilience in the case of planned or unplanned outages.
+	
+	
+### Types of peers ###
+	* These are the two major types of peer:
+		1)Committing Peer = Every peer node in a channel is a committing peer. It receives blocks of generated 					    transactions, which are subsequently validated before they are committed to the peer node’s 				    copy of the ledger as an append operation.
+		2)Endorsing Peer = Every peer with a smart contract can be an endorsing peer if it has a smart contract installed. 					   However, to actually be an endorsing peer, the smart contract on the peer must be used by a 					   client application to generate a digitally signed transaction response. The term endorsing peer 					   is an explicit reference to this fact.
+	* there are two other roles a peer can adopt:
+		1)Leader peer = When an organization has multiple peers in a channel, a leader peer is a node which takes 					responsibility for distributing transactions from the orderer to the other committing peers in the 					organization. A peer can choose to participate in static or dynamic leadership selection.
+		
+		
+		
+### Leadership Selection for Leader Peer ###
+	* A peer can choose to participate in static or dynamic leadership selection.
+	* It is helpful, therefore to think of two sets of peers from leadership perspective – those that have static leader 		  selection, and those with dynamic leader selection. For the static set, zero or more peers can be configured as leaders. 		  For the dynamic set, one peer will be elected leader by the set. Moreover, in the dynamic set, if a leader peer fails, 		  then the remaining peers will re-elect a leader.
+	* It means that an organization’s peers can have one or more leaders connected to the ordering service. This can help to 		  improve resilience and scalability in large networks which process high volumes of transactions.
 
 
 ### Determinism --- Smart Contracts ###
@@ -282,6 +476,10 @@
 	
 ### Private Data Collections ###
 	* When a subset of organizations on that channel need to keep their transaction data confidential, a private data 		  collection (collection) is used to segregate this data in a private database, logically separate from the channel 		  ledger, accessible only to the authorized subset of organizations.
+	
+	
+### MSP -- should be cleared ###
+	* Network configuration NC4 uses a named MSP to identify the properties of certificates dispensed by CA4 which associate 		  certificate holders with organization R4. NC4 can then use this MSP name in policies to grant actors from R4 particular 		  rights over network resources. An example of such a policy is to identify the administrators in R4 who can add new 		  member organizations to the network. We don’t show MSPs on these diagrams, as they would just clutter them up, but they 		  are very important.
 ###################################################################################################	
 
 
