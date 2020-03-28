@@ -151,7 +151,6 @@
 	* When orderers receives join request from peers, it uses the *channel configuration* to determine Peer’s permissions on 		  the requeted channel.
 	* orderer is initially configured and started by an administrators (of anyone org.) according to a *network configuration*.
 	* ordering service node (for eg,O4) is the actor that creates consortia(for eg,2) and channels.
-#	* uses the *system channel* ((system channel is connected to *network configuration*)).
 	* orderer(s) must be hosted by any one (or more) of the organization in a network as per *network configuration*.(2 points)
 	* also supports application channels, for the purposes of transaction ordering into blocks for distribution.
 	* it can order transactions for one or more application channels.
@@ -163,7 +162,7 @@
 		* at the network level, orderer role is to provide a management point for network resources according to the 			  policies defined in network configuration.
 		* Notice again how these roles are defined by different policies within the channel and network configurations 			  respectively.
 	* Whether acting as a network management point, or as a distributor of blocks in a channel, its nodes(orderers) can be 		  distributed as required throughout the multiple organizations in a network.
-#	* ordering service nodes operate a mini-blockchain, connected via the *system channel*.
+	* ordering service nodes (multiple orderers) are connected via the *System Channel* which operates a mini-blockchain.  
 	
 	
 	
@@ -292,7 +291,6 @@
 	* channel configurations remain completely separate from each other, and completely separate from the network configuration
 	* each node in the ordering service records each channel in the network configuration, so that there is a record of each 	   channel created, at the network level.
 	* Although ordering service node creates consortia and channels, the *intelligence* of the network is contained in the 		  *network configuration* that Ordering services(orderers) is obeying.
-#	* *network configuration transactions* are used to co-operatively maintain a consistent copy of the network configuration 		  at each ordering service node. 
 	
 	
 	
@@ -318,15 +316,27 @@
 	* Note that separate mod_policy for both n/w & channel configuration policies within the policies respectively. 
 	
 	
-	
-	
-### Modification of Network and/or Channel Configuration Policy ###
-#	* Respective Orgs` administrator must submit a *Configuration Transaction* to change the network or channel configuration.
-#	* *Configuration Transaction* must be signed by the organizations identified in the appropriate policy(**mod_policy**) as 		  being responsible for configuration change.	
-#	* Using the system channel, ordering service nodes(multiple orderers) distribute *network configuration transactions*.
-	
-	
-	
+
+
+### (N/W & Channel) Configuration Transactions ###
+	* Network Configuration Transaction:
+		* To change a network configuration, a network administrator must submit a *configuration transaction* to change 			  the network configuration.
+		* It must be signed by the organizations identified in the *mod_policy* (with network configuration) as being 			  responsible for network configuration change.
+		* WKT, ordering service nodes (multiple orderers) are connected via the *System Channel*.
+		* Using the system channel, ordering service nodes distribute *network configuration transactions*.
+		* These transactions are used to co-operatively maintain a consistent copy of the *network configuration at each 			  ordering service node*.
+		
+	* Channel Configuration Transactions:
+		* To change a channel configuration, a channel administrator must submit a *configuration transaction* to change 			  the channel configuration.
+		* It must be signed by the organizations identified in the *mod_policy* (with channel configuration) as being 			  responsible for channel configuration change.
+		* In a similar way, peer nodes in an *application channel* can distribute channel configuration transactions.
+		* these transactions are used to maintain a consistent copy of the *channel configuration at each peer node*.
+		
+	* Every configuration change results in a new configuration block transaction being generated.
+
+
+
+
 ### Gossip Protocol ###
 	* the technical mechanism by which peers within an individual organization efficiently discover and communicate with each 		  other when an organization have large number of peer nodes.
 
@@ -408,6 +418,10 @@
 ### Final Version Check (i.e., Committing phase) - Double Spend Problem ###
 	* final Version Check by peers in committing phase provides protection against *double spend operations* and other threats 		  that might compromise data integrity, and allows for functions to be executed against non-static variables.
 
+
+### De-centralized Network ###
+	* The careful use of network and channel policies allow even large networks to be well-governed. Organizations are free to 		  add peer nodes to the network so long as they conform to the policies agreed by the network. *Network and channel 		  policies* create the balance between *autonomy and control* which characterizes a de-centralized network.
+	* Objects like network configurations, that are logically single, turn out to be physically replicated among a set of 		  ordering services nodes. channel configurations, ledgers, and to some extent smart contracts which are installed in 		  multiple places but whose interfaces exist logically at the channel level. It enables Hyperledger Fabric Blockchain 		  Network to be both *de-centralized* and yet *manageable* at the same time. 
 
 
 ###################################################################################################
