@@ -100,20 +100,102 @@
 	
 	
 ### Distributed Ledger ###
+	* Distributed Ledger is used to encapsulate the **Shared Information** in a network.
 	* Is a combination of the two components, world state *Database* and the transaction log *History*.
 	* Single ledger can have one or more smart contracts.
 	* Legder physically hosted on Peer, but logically hosted on the channel.
 	* 1)World State Database
 		* Describes the state of the ledger at a given point in time.
 		* It’s the database of the ledger.
+		* The world state database could be a relational data store, or a graph store, or a temporal database.
+		* A database that holds *current values* of a *set of ledger states*.
+		* Ledger states are, by default, expressed as key-value pairs with the Version Number.
+		* Note that Version Number is for Every State in a ledger.
+		* The version number is for internal use by Hyperledger Fabric, and is incremented every time the state changes.
+		* The version is checked whenever the state is updated to make sure the current states matches the version at the 			  time of endorsement.
+		* This ensures that the world state is changing as expected; that there has not been a concurrent update.
+		* World State can be re-generated from the blockchain at any time. 
+		* LevelDB is the default and is particularly appropriate when ledger states are simple key-value pairs. 
+		* CouchDB is a particularly appropriate choice when ledger states are structured as JSON documents because CouchDB 			  supports the rich queries and update of richer data types often found in business transactions.
+		* Implementation-wise, CouchDB runs in a separate operating system process, but there is still a 1:1 relation 			  between a peer node and a CouchDB instance, unlike LevelDB runs in a same operating system process.
+		* All of this is invisible to a smart contract.
+		* World states are in a *Namespace* so that only smart contracts within the same chaincode can access a given 			  namespace.
 	* 2)Transaction Log History
-		* Records all transactions which have resulted in the current value of the world state.
+		* Blockchain is always implemented as a File.
+		* Immutably records all transactions which have resulted in the current value of the world state.
 		* Sequenced, tamper-resistant record of all state transitions in the fabric.
 		* It’s the update history for the world state.
+		* Transaction Log History (Blockchain) determines the *World State* of the Ledger.
+		* Blockchain has recorded *every previous version of each ledger state* and how it has been changed.
+		* Blockchain is structured as sequential log of interlinked blocks, where each block contains a sequence of 			  transactions, each transaction representing a query or update to the world state.
+		* Each block’s header includes a hash of the block’s transactions (each hash for every transaction in a current 		  block only), as well a hash of the prior block’s header.
+		* Genesis Block is the starting point for the ledger, though it does not contain any User Transactions.
+		* Genesis Block contains a Configuration Transaction containing the initial state of the network channel.
+		* A blockchain is not namespaced beacause,It contains transactions from many different smart contract namespaces.
 	* Each participant has a copy of the ledger to every Hyperledger Fabric network they belong to.
 	* Described as decentralized because it is replicated across many network participants, each of whom collaborate in its 	  maintenance.
-	* By default, this is a LevelDB key-value store database.
 	
+	
+	
+	
+	
+### Blocks ###
+	* Blocks consists of three sections:
+		1) Block Header:
+			* This section comprises three fields, written when a block is created.	
+				1) Block number: An integer starting at 0 (the genesis block), and increased by 1 for very new 							 block appended to the blockchain.
+				2) Current Block Hash:         The hash of all the transactions contained in the current block.
+				3) Previous Block Header Hash: The hash from the previous block header.
+				
+		2) Block Data:
+			* This section contains a list of transactions arranged in order (sequentially).
+			* Every Transaction consists of the following fields:
+				1) Header: A metadata about transaction (for eg, name of the relevant chaincode, and its version).
+				2) Signature: Contains a cryptographic signature, created by the client application.
+					      It requires the application’s private key to generate it. (Tamper-Resistant Check)
+				3) Proposal: Encodes the input parameters supplied by an application to the smart contract which 						     creates the proposed ledger update.
+					     When the smart contract runs, this proposal provides a set of input parameters, 						     which, in combination with the current world state, determines the new world state.
+				4) Response: Captures the before and after values of the world state, as a Read Write set(RW-set). 					             It’s the output of a smart contract, and if the transaction is successfully 						     validated, it will be applied to the ledger to update the world state.
+				5) Endorsements: This is a list of signed transaction responses from each required organization 						 sufficient to satisfy the endorsement policy. 
+						 whereas only one transaction response is included in the transaction, there are 							 multiple endorsements.
+		3) Block Metadata:
+			* This section contains the certificate and signature of the Block Creator which is used to verify the 				  block by network nodes. 
+			* Subsequently, the block committer adds a Valid/Invalid Indicator for every transaction into a bitmap 				  that also resides in the block metadata, as well as a hash of the cumulative state updates up until and 				  including that block, in order to detect a state fork. 
+			* Unlike the block data and header fields, this section is not an Input to the *Block Hash Computation*.
+	
+	
+	
+	
+	
+### 3-Phase Process of UPDATE QUERY TRANSACTION WORKFLOW ###
+### entire transaction workflow process is called consensus ###
+	* Specifically, applications that want to update the ledger are involved in a 3-phase process, which ensures that all the 		  peers in a blockchain network keep their ledgers consistent with each other.
+	
+	* Phase 1: --- Proposal
+		* Applications generates transaction proposal which they send to each of the required set of peers (as per the 			  *Endorsement Policy* defined for a Chaincode) for endorsement.
+		* Each of these endorsing peers then independently executes a chaincode using the transaction proposal to generate 			  a transaction proposal response which is endorsed by adding Digital Signature. 
+		* It does not apply this update to the ledger, but rather simply signs the entire payload using its private key 		  and returns it to the application.
+		* Once the application has received a sufficient number of signed proposal responses, the first phase of the 			  transaction flow is complete. 
+		* An application can simply request a more up-to-date proposal response when the peer return inconsistent 			  transaction responses for the same transaction proposal.
+		
+	* Phase 2: --- Ordering and Packaging transactions into Blocks
+		* Orderer receives transactions containing endorsed transaction proposal responses from many applications, and 			  orders (sequencing) the transactions and packaging them into blocks,ready for distribution to the peers.
+		
+	* Phase 3: --- Validation and Commit
+		* It involves the distribution and subsequent validation of blocks from the orderer to the peers, where they can 			  be committed to the ledger.
+		* When a new block is generated, all of the peers connected to the orderer will be sent a copy of the new block.
+		* Upon receipt of a block, a peer will process each transaction in the sequence in which it appears in the block. 			* For every transaction, each peer will verify that the transaction has been endorsed by the required 			  organizations according to the *Endorsement Policy* of the chaincode which generated the transaction. 
+		* This process of validation verifies that all relevant organizations have generated the same outcome or result.
+		* If a transaction has been endorsed correctly, the peer will attempt to apply it to the ledger.
+		* To do above step, a peer must perform a *Ledger Consistency Check* to verify that the current state of the 			  ledger is compatible with the state of the ledger when the proposed update was generated.
+		* This may not always be possible, even when the transaction has been fully endorsed.
+		* Failed transactions (in consistency check) after fully endorsed, are not applied to the ledger, but they are 			  retained for audit purposes, as are successful transactions.
+		* Finally, every time a block is committed to a peer’s ledger after consistency check with ledger is successfull, 			  that peer generates an appropriate event.
+	* Events
+		1) *Block Events* include the full block content.
+		2) Block *Transaction Events* include summary information only, such as whether each transaction in the block has 			   been validated or invalidated.
+		3) *Chaincode Events* that the chaincode execution has produced can also be published at this time.
+		
 	
 	
 ### Features of Fabric Ledger ###
@@ -133,6 +215,7 @@
 	
 	
 ### Peer ###
+	* Peers can be created, started, stopped, reconfigured, and even deleted.
 	* Every peer node in a channel is a *Committing Peer*.
 	* To actually be an *Endorsing Peer*, the smart contract on the peer must be used by a client application to generate a 	  digitally signed transaction response.
 	* When an organization has multiple peers in a channel, a *Leader Peer* is a node which takes responsibility for 		  distributing blocks of transactions from the orderer to the other committing peers in the organization.
@@ -141,23 +224,29 @@
 	* A peer can be a committing peer, endorsing peer, leader peer and anchor peer all at the same time!
 	* Only the anchor peer is optional.
 	* For all practical purposes, there will always be a leader peer and at least one endorsing peer and at least one 		  committing peer.
+	* Peers provide the control point for access to, and management of, channels.
 	* Each peer node (belongs to one org.)in a channel uses the copy of Channel Configuration to determine the operations that 		  respective organizations` client applications can perform.
 	* Each peer maintains a copy of the channel configuration for each channel of which they are a member. 
 	* Once Peer is started, it can join channel using the *Orderer* by raising the join request to orderer.
 	* Each peer maintains a copy of the ledger for each channel of which they are a member.
-	* Single peer can host one or more ledgers.
-	* Peer can install one or more smart contracts in a single ledger.
+	* Single peer actually hosts one or more *Instances* of the Ledger.
+	* Peer can install one or more smart contracts (Instances) for a single ledger.
+	* Peers also have special *System Chaincodes*.
 	* Peers and orderers can communicate with each other using channel.
+	* Each and every peer in the network is assigned a digital certificate by an administrator from its owning organization.
 	* Peer can only run a smart contract and further can take part in the process of transaction endorsement if it is 		  installed on it, but it can know about the interface of a smart contract by being connected to a channel.
 	* Validate transactions by verifying the transaction signatures against endorsement policies and enforce the policies.
 	* Prior to appending a block (commit to ledger) after validating the transactions, a versioning check is performed to 		  ensure that states for assets that were read have not changed since chaincode execution time. (protection against the 	  double spend).
 	* At each of the committing peers, distributed transactions from orderers are recorded, whether valid or invalid, and 		  their local copy of the ledger updated appropriately.
+	* It’s not really important where the peer is physically located — it could reside in the cloud, or in a data centre owned 		  by one of the organizations, or on a local machine — it’s the *digital certificate associated with it* that identifies 		  it as being owned by a particular organization.
+	* For Example, P3 could be hosted in Org1’s data center, but as long as the digital certificate associated with it is 		  issued by CA2, then it’s owned by Org2.
 		
 		
 		
 ### Smart Contracts ###
 	* Business logic of a blockchain application.
 	* Functions as a trusted distributed application.
+	* Smart Contracts is used to encapsulate the **Shared Processes** in a network.
 	* Are used to generate transactions.
 	* More no. of smart contracts are packaged into a *Chaincode*.
 	* Every smart contract inside a chaincode package has an Endorsement Policy. --- For Transaction Endorsement
@@ -167,9 +256,11 @@
 	* X.509 certificates are used in smart contract (transaction responses) to digitally sign transactions.
 	* Invoked by an application external to the blockchain when that application needs to interact with the ledger.
 	* Chaincode interacts only with the database component of the ledger, the world state (querying it, for example), and not 		  the transaction log.
-	* Many smart contracts run concurrently in the network
+	* It is possible for a Single Smart Contract which accesses more ledger instaces in a peer (must be configured in this way)
+	* Many smart contracts run concurrently in the network.
 	* They may be deployed dynamically (in many cases by anyone)
 	* Application code should be treated as untrusted, potentially even malicious.
+	* In reality, each chaincode has its *Own World State* (of respective ledger--- check this) that is separate from all 		  other chaincodes. 
 	* Traditionally, chaincodes are launched by the peer, and then connect back to the peer.
 	* In modern approach, now possible to run *Chaincode As an External Service*, for example in a Kubernetes pod, which a 		  peer can connect to and utilize for chaincode execution.
 	
@@ -177,7 +268,7 @@
 	
 ### Orderers ###
 	* Orderers, service as a *Network Administration Point* for the fabric network.
-	* When orderers receives join request from peers, it uses the *Channel Configuration* to determine Peer’s permissions on 		  the requeted channel.
+	* When orderers receives join request from peers, it uses the *Policy* in the *Channel Configuration* to determine Peer’s 		  permissions on the requeted channel by using peer`s identity.
 	* Orderer is initially configured and started by an administrators (of anyone org.) according to a *Network Configuration*.
 	* Ordering service node (for eg,O4) is the actor that creates consortia(for eg,2) and channels.
 	* Orderer(s) must be hosted by any one (or more) of the organization in a network as per *Network Configuration*.(2 points)
@@ -234,7 +325,7 @@
 	
 	
 ### Applications ###
-	* Applications can connect to both peers and orderers by using the channel.
+	* Applications can connect to both peers and orderers by using the channel with the help of SDK`s.
 	* Single application of one organization can connect to one or more channels as per respective channel config in a network.
 	* Organisations maintain the client applications.
 	* X.509 certificates are used in client application (transaction proposals). 
@@ -243,7 +334,11 @@
 	* Client applications send transaction proposals (serves as input to the smart contract) to peers owned by an organization 		  specified by the smart contract endorsement policy, which uses it to generate an endorsed transaction response, which is 		  returned by the peer node to the client application. (process called as Smart Contract Invocation).
 	* When Fabric SDK is used to *register* a user with the CA, *Node OU Roles(client,peer,orderer,admin) & OU Attributes* 	  		  are assigned to an *registering identity* which gains a appropriate special role to the identity. (SPECIAL CASE SCENARIO)
 	* It is recommended that when the user is registered with the CA, that the *admin role in Node OU* is used to designate 	  the node administrator. Then, the identity is recognized as an *Admin of ORG* by the Node OU role value in their 		  signcert(certificate). As a reminder, in order to leverage the admin role, the “identity classification” feature must be 		  enabled in the config.yaml above by setting “Node OUs” to Enable: true.
-	
+	* Applications receive Events asynchronously when Smart Contract Invocation process is complete.
+	* Applications can, however, connect to one or more peers to issue a query.
+	* Applications can register for different events (block,transaction,chaicode) so that they can be notified when they occur.
+	* Event notifications conclude the third and final phase of the transaction workflow.
+	* An application program can invoke a smart contract which uses simple ledger APIs to *get, put and delete* ledger states.
 	
 	
 	
@@ -259,10 +354,12 @@
 	* Allowing a group of participants to create a separate ledger of transactions.
 	* Data in a channel is completely isolated from the rest of the network, including other channels.
 	* One Ledger per Channel.
+	* Above point means a completely separate blockchain, and completely separate world states, including namespaces.
 	* There can be multiple channels in a network.
 	* Channel can have any number of organizations connected to it.
 	* Channel’s ledger contains a configuration block defining policies, access control lists, and other pertinent information.
 	* Contain Membership Service Provider instances allowing for crypto materials to be derived from different certificate 		  authorities.
+	
 	
 	
 	
@@ -552,7 +649,7 @@
 
 ### Gossip Protocol ###
 	* The technical mechanism by which peers within an individual organization efficiently discover and communicate with each 		  other when an organization have large number of peer nodes.
-
+	* Not every peer needs to be connected to an orderer — *peers can cascade blocks to other peers using the gossip 		  protocol*, who also can process them independently (blocks). 
 
 ###################################################################################################
 
@@ -613,6 +710,12 @@
 	* One approach    - Encrypting Data -- Given enough time and computational resource, the encryption could be broken.
 	* Second approach - Zero Knowledge Proofs (ZKP) -- Computing a ZKP requires considerable time and computational resources. 								   Hence, the trade-off in this case is performance.
 	* Both approaches have their trade-offs. So, Channels and Private Data Collections are used.
+	
+	
+### Scalability and Confidentiality ###
+	* Endorsing Nodes keeps the logic of the chaincode confidential to endorsing organizations. This is in contrast to the 		  output of the chaincodes (the transaction proposal responses) which are shared with every peer in the channel, whether 		  or not they endorsed the transaction. 
+	* This specialization of endorsing peers is designed to help scalability and confidentiality.
+	
 	
 ### Encryption of Transactions ###
 	* To further obfuscate the data, values within chaincode can be encrypted (in part or in total) using common cryptographic 		  algorithms such as AES before sending transactions to the ordering service and appending blocks to the ledger. Once 		  encrypted data has been written to the ledger, it can be decrypted only by a user in possession of the corresponding key 		  that was used to generate the cipher text.
@@ -728,6 +831,12 @@
 
 ### Determinism --- Smart Contracts ###
 	* Smart contracts executing in a blockchain that operates with the order-execute architecture must be deterministic; 		  otherwise, consensus might never be reached. To address the non-determinism issue, many platforms require that the smart 		  contracts be written in a non-standard, or domain-specific language (such as Solidity) so that non-deterministic     		  operations can be eliminated. This hinders wide-spread adoption because it requires developers writing smart contracts 		  to learn a new language and may lead to programming errors.
+	
+	
+	
+### Non - determinism ###
+	* For the same transaction proposal, different peers can return different results and therefore inconsistent transaction 		  responses to the application because the chaincode is non-deterministic. Non-determinism is the enemy of chaincodes and 		  ledgers and if it occurs it indicates a serious problem with the proposed transaction, as inconsistent results cannot, 		  obviously, be applied to ledgers. An individual peer cannot know that their transaction result is non-deterministic — 	  transaction responses must be gathered together for comparison before non-determinism can be detected.
+	
 	
 	
 	
