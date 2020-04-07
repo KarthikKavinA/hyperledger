@@ -41,7 +41,7 @@
 	* Replacing order-execute fashion with *Execute-Order-Validate* model.
 	* Execute a transaction and check its correctness, thereby endorsing it,
 	* Order transactions via a (pluggable) consensus protocol, and
-	* Validate transactions against an application-specific endorsement policy before committing them to the ledger.
+	* Validate transactions against an application-specific endorsement policy (one policy for one chaincode)before committing them to the ledger.
 	* First phase (1st point) also eliminates any non-determinism, as inconsistent results can be filtered out before ordering
 
 
@@ -64,15 +64,17 @@
 
 ### Application-Specific Endorsement Policy ###
 ### For Transaction Endorsement ###
-	* Every Smart Contract inside a chaincode package has an Endorsement Policy.(not to be confused with chaincode endorsement)
-	* Specifies which peer nodes, or how many of them, belonging to different channel members need to execute and validate a transaction against a given smart contract in order for the transaction to be considered valid.
+	* Associated with *Every Chaincode* is an *Endorsement Policy* (one) that applies to *all of the smart contracts* defined within it.(not to be confused with Chaincode Definition Endorsement (LifecycleEndorsement Policy))
+	* Specifies which peer nodes, or how many of them, belonging to different channel members need to *execute and validate* a transaction against a given smart contract in order for the transaction to be considered *valid*.
 	* Hence, the endorsement policies define the organizations (through their peers) who must “endorse” (i.e., approve of) the execution of a proposal.
-	* Each transaction need only be executed (endorsed) by the subset of the peer nodes necessary to satisfy the transaction’s endorsement policy.
+	* Each transaction need only be executed (endorsed) by the subset of the peer nodes necessary to satisfy the transaction’s endorsement policy (one policy for a one chaincode which applies to all smart contracts defined within it) before they will be accepted by other organizations(committing peer’s) onto their copy of the ledger.
 	* Fabric lifecycle allows you to change an endorsement policy or private data collection configuration without having to repackage or reinstall the chaincode.
+	* Smart Contracts inside the chaincode can then be executed by channel members, subject to the endorsement policy specified in the *Chaincode Definition*.
+
 
 
 	* The *Endorsement Policy* is the *default endorsement policy*.
-	* Endorsement policy is specified for a *chaincode (smart contracts - imp.)* when it is approved and committed to the channel using the Fabric chaincode lifecycle.
+	* One Endorsement policy is specified for a *chaincode (smart contracts - imp.)* when it is approved and committed to the channel using the *Fabric chaincode lifecycle*.
 	* *One Endorsement Policy* covers all of the *state* associated with a chaincode.
 	* Endorsement policy can be specified either by reference to an endorsement policy defined in the channel configuration or by explicitly specifying a Signature policy.
 	* If an endorsement policy is not explicitly specified during the approval step, the default Endorsement policy "MAJORITY Endorsement" is used which means that a majority of the peers belonging to the different channel members (organizations) need to execute and validate a transaction against the chaincode in order for the transaction to be considered valid.
@@ -149,12 +151,13 @@
 
 		2) Block Data:
 			* This section contains a list of transactions arranged in order (sequentially).
+			* All transactions have an identifier (like t3,t4), a proposal (input & signature), and a response (output & endorsement) signed by a set of organizations.
 			* Every Transaction consists of the following fields:
 				1) Header: A metadata about transaction (for eg, name of the relevant chaincode, and its version).
 				2) Signature: Contains a cryptographic signature, created by the client application. It requires the application’s private key to generate it. (Tamper-Resistant Check)
 				3) Proposal: Encodes the input parameters supplied by an application to the smart contract which creates the proposed ledger update. When the smart contract runs, this proposal provides a set of input parameters,which, in combination with the current world state, determines the new world state.
 				4) Response: Captures the before and after values of the world state, as a Read Write set(RW-set). It’s the output of a smart contract, and if the transaction is successfully validated, it will be applied to the ledger to update the world state.
-				5) Endorsements: This is a list of signed transaction responses from each required organization sufficient to satisfy the endorsement policy. whereas only one transaction response is included in the transaction, there are multiple endorsements.
+				5) Endorsements: This is a list of signed transaction responses from each required organization sufficient to satisfy the endorsement policy (one policy for one chaincode). whereas only one transaction response is included in the transaction, there are multiple endorsements.
 		3) Block Metadata:
 			* This section contains the certificate and signature of the Block Creator which is used to verify the block by network nodes.
 			* Subsequently, the block committer adds a Valid/Invalid Indicator for every transaction into a bitmap that also resides in the block metadata, as well as a hash of the cumulative state updates up until and including that block, in order to detect a state fork.
@@ -169,8 +172,8 @@
 	* Specifically, applications that want to update the ledger are involved in a 3-phase process, which ensures that all the peers in a blockchain network keep their ledgers consistent with each other.
 
 	* Phase 1: --- Proposal
-		* Applications generates transaction proposal which they send to each of the required set of peers (as per the *Endorsement Policy* defined for a Chaincode) for endorsement.
-		* Each of these endorsing peers then independently executes a chaincode using the transaction proposal to generate a transaction proposal response which is endorsed by adding Digital Signature.
+		* Applications generates transaction proposal which they send to each of the required set of peers (as per the *One Endorsement Policy* defined for a One Chaincode) for endorsement.
+		* Each of these endorsing peers then independently executes a chaincode using the transaction proposal (consists of set of input parameters which is used in combination with its program logic to read and write the ledger) to generate a transaction proposal response (Changes to the world state are captured as a transaction proposal response, which contains a read-write set with both the states that have been read, and the new states that are to be written if the transaction is valid) which is endorsed by adding Digital Signature.
 		* It does not apply this update to the ledger, but rather simply signs the entire payload using its private key and returns it to the application.
 		* Once the application has received a sufficient number of signed proposal responses, the first phase of the transaction flow is complete.
 		* An application can simply request a more up-to-date proposal response when the peer return inconsistent transaction responses for the same transaction proposal.
@@ -182,13 +185,14 @@
 		* It involves the distribution and subsequent validation of blocks from the orderer to the peers, where they can be committed to the ledger.
 		* When a new block is generated, all of the peers connected to the orderer will be sent a copy of the new block.
 		* Upon receipt of a block, a peer will process each transaction in the sequence in which it appears in the block.
-		* For every transaction, each peer will verify that the transaction has been endorsed by the required organizations according to the *Endorsement Policy* of the chaincode which generated the transaction.
+		* For every transaction, each peer will verify that the transaction has been endorsed by the required organizations according to the *Endorsement Policy* of the single chaincode which generated the transaction.
 		* This process of validation verifies that all relevant organizations have generated the same outcome or result.
 		* If a transaction has been endorsed correctly, the peer will attempt to apply it to the ledger.
-		* To do above step, a peer must perform a *Ledger Consistency Check* to verify that the current state of the ledger is compatible with the state of the ledger when the proposed update was generated.
+		* To do above step, a peer must perform a *Ledger Consistency Check* to verify that the *Current Value of the world state* matches the *Read Set of the transaction* when it was signed by the endorsing peer nodes (OR) current state of the ledger is compatible with the state of the ledger when the proposed update was generated.
 		* This may not always be possible, even when the transaction has been fully endorsed.
 		* Failed transactions (in consistency check) after fully endorsed, are not applied to the ledger, but they are retained for audit purposes, as are successful transactions.
 		* Invalidated (Failed) transactions are still retained in the immutable block created by the orderer, but they are marked as invalid by the peer and do not update the ledger’s state.
+		* If either validation or consistency check phase of transaction is failed, then the transaction is marked as *Invalid*.
 		* Finally, every time a block is committed to a peer’s ledger after consistency check with ledger is successfull, that peer generates an appropriate event.
 	* Events
 		1) *Block Events* include the full block content.
@@ -248,22 +252,49 @@
 	* Business logic of a blockchain application.
 	* Functions as a trusted distributed application.
 	* Smart Contracts is used to encapsulate the **Shared Processes** in a network.
+	* A smart contract defines the rules between different organizations in executable code.
+	* At the heart of a smart contract is a set of *Transaction* definitions.
+	* Smart Contract defines the transaction logic that controls the *Lifecycle of a Business Object* contained in the world state.
+	* Smart contracts primarily *Put, Get and Delete States* in the world state, and can also query the immutable blockchain record of transactions.
 	* Are used to generate transactions.
-	* More no. of smart contracts are packaged into a *Chaincode*.
-	* Every smart contract inside a chaincode package has an Endorsement Policy. --- For Transaction Endorsement
+	* More no. of related smart contracts are packaged into a *Chaincode*.
+	* Every chaincode has an One Endorsement Policy that applies to all of the smart contracts defined within it. --- For Transaction Endorsement
+	* Think of smart contracts as governing transactions, whereas chaincode governs how smart contracts are packaged for deployment.
 	* *Chaincode Package* must have been installed on *Peers* by an administrator of the (respective peer) organization, and then defined on a *Channel*.
+	* Channel Members can only execute a smart contract after the chaincode has been *defined* on a channel.
+ 	* Smart Contracts inside the chaincode can then be executed by channel members, subject to the endorsement policy specified in the *Chaincode Definition*.
 	* Installing a smart contract shows how we think of it being *Physically Hosted* on a peer, whereas a smart contract that has been defined on a channel shows how we consider it *Logically Hosted* by the channel.
 	* State transitions are a result of chaincode invocations, recorded as transactions.
 	* X.509 certificates are used in smart contract (transaction responses) to digitally sign transactions.
 	* Invoked by an application external to the blockchain when that application needs to interact with the ledger.
 	* Chaincode interacts only with the database component of the ledger, the world state (querying it, for example), and not the transaction log.
+	* World State is not updated when the smart contract is executed!
 	* It is possible for a Single Smart Contract which accesses more ledger instaces in a peer (must be configured in this way)
+	* Chaincode can also be used for low level system programming of Fabric.
 	* Many smart contracts run concurrently in the network.
 	* They may be deployed dynamically (in many cases by anyone)
 	* Application code should be treated as untrusted, potentially even malicious.
+	* When a chaincode is deployed, all smart contracts within it are made available to applications.
+	* Smart Contract can call other smart contracts both within the same channel and across different channels. It this way, they can read and write world state data to which they would not otherwise have access due to smart contract namespaces.
 	* In reality, each chaincode has its *Own World State* (of respective ledger--- check this) that is separate from all other chaincodes.
+#	* Must be a only one chaincode defined for a channel. so that each chaincode for a channel has its own world state that is separate from all other chaincodes defined in different channels. suppose more chaincodes installed on a channel, it must need separate world state but it violating the one ledger per channel has one world state policy.
 	* Traditionally, chaincodes are launched by the peer, and then connect back to the peer.
 	* In modern approach, now possible to run *Chaincode As an External Service*, for example in a Kubernetes pod, which a peer can connect to and utilize for chaincode execution.
+	* Single Chaincode has many related smart contracts. Each smart contract has many transactions in it. Each transacton in a smart contract controls the lifecyle of the business Objects in a world state.
+	* Smart Contract can have the below three opreations:
+		* A *Get* typically represents a *Query* to retrieve information about the current state of a business object.
+		* A *Put* typically *Creates* a new business object or *Modifies* an existing one in the ledger world state.
+		* A *Delete* typically represents the *Removal* of a business object from the current state of the ledger, but not its history.
+	* System Chaincode:
+		* Generally, chaincode can also define low-level program code which corresponds to *domain independent **System** interactions* leads to system chaincode, unrelated to these smart contracts  encode the *domain dependent rules* for business processes.
+		* Different types of system chaincodes:
+			1) _lifecycle --- runs in all peers and manages the installation of chaincode on your peers, the approval of chaincode definitions for your organization, and the committing of chaincode definitions to channels.
+			2) Lifecycle system chaincode (LSCC) --- manages the chaincode lifecycle for the 1.x releases of Fabric.
+			3) Configuration system chaincode (CSCC) ---  runs in all peers to handle changes to a channel configuration, such as a policy update.
+			4) Query system chaincode (QSCC) --- runs in all peers to provide ledger APIs which include block query, transaction query etc.
+			5) Endorsement system chaincode (ESCC) --- runs in endorsing peers to cryptographically sign a transaction response.
+			6) Validation system chaincode (VSCC) --- validates a transaction, including checking endorsement policy and read-write set versioning.
+		* It is possible for low level Fabric developers and administrators to modify these system chaincodes for their own uses.
 
 
 
@@ -314,6 +345,7 @@
 	* Organization Units (OUs) are defined in the Fabric CA client configuration file and can be associated with an identity when it is created.
 	* In Fabric, NodeOUs provide a way to classify identities in a *digital certificate hierarchy*.
 	* For Organization Policies, their canonical path is usually "/Channel/<Application|Orderer>/<OrgName>/<PolicyName>".
+	* By joining multiple channels, an organization can participate in a so-called *network of networks*.
 
 
 ### Certificate Authority CA ###
@@ -339,7 +371,7 @@
 	* X.509 certificates are used in client application (transaction proposals).
 	* Client application will have an identity that associates it with an organization.
 	* Client application can invoke smart contracts, Once the chaincode definition has been committed to the channel.
-	* Client applications send transaction proposals (serves as input to the smart contract) to peers owned by an organization specified by the smart contract endorsement policy, which uses it to generate an endorsed transaction response, which is returned by the peer node to the client application. (process called as Smart Contract Invocation).
+	* Client applications send transaction proposals (serves as input to the smart contract) to peers owned by an organization specified by the smart contract(chaincode) endorsement policy, which uses it to generate an endorsed transaction response, which is returned by the peer node to the client application. (process called as Smart Contract Invocation).
 	* When Fabric SDK is used to *register* a user with the CA, *Node OU Roles(client,peer,orderer,admin) & OU Attributes* are assigned to an *registering identity* which gains a appropriate special role to the identity. (SPECIAL CASE SCENARIO)
 	* It is recommended that when the user is registered with the CA, that the *admin role in Node OU* is used to designate the node administrator. Then, the identity is recognized as an *Admin of ORG* by the Node OU role value in their signcert(certificate). As a reminder, in order to leverage the admin role, the “identity classification” feature must be enabled in the config.yaml above by setting “Node OUs” to Enable: true.
 	* Applications receive Events asynchronously when Smart Contract Invocation process is complete.
@@ -352,6 +384,7 @@
 
 ### Channels ###
 	* Application channels are used to provide a private communication mechanism between organizations in the consortium.
+	* Channels provide an efficient sharing of infrastructure while maintaining data and communications privacy.
 	* Only network administrators (organization(s)) as defined in network configuration policy, can able to create new channel.
 	* Channels keep *Transactions* private from the broader network.
 	* Channels can serve for one or more applications.
@@ -495,8 +528,11 @@
 
 
 ### Chaincode Definition ###
-	* A set of parameters that establish how a chaincode will be used on a channel.
-	* It has endorsement policy for a smart contract ( describes which organizations` peer should digitally sign a generated transaction(not a chaincode) before they will be accepted by other organizations(committing peer’s) onto their copy ofthe ledger).
+	* It is a struct that contains the parameters that govern how a chaincode operates.
+	* These parameters include the chaincode name, version, and the endorsement policy.
+	* When a sufficient number of organizations (a majority by default) have approved to the same chaincode definition, then the definition can be committed to the channel --- "LifecycleEndorsement Policy" For Chaincode Definition Endorsement.
+	* But, Endorsement policy define the organizations (through their peers) who must “endorse” (i.e., approve of) the execution of a proposal --- "Endorsement Policy" For Transaction Endorsement.
+	* Smart Contracts inside the chaincode can then be executed by channel members, subject to the endorsement policy specified in the *Chaincode Definition*.
 	* Committing the chaincode definition to the channel, places the endorsement policy on the channel ledger.
 
 
@@ -677,10 +713,10 @@
 
 #################################################     *What's New in v2.0*     ####################
 ### Decentralized Governance for Smart Contracts ###
-	* New Fabric chaincode lifecycle allows multiple organizations to come to agreement on the parameters of a chaincode, such as the chaincode endorsement policy, before it can be used to interact with the ledger.
+	* New Fabric chaincode lifecycle allows multiple organizations to come to agreement on the parameters of a chaincode, such as the chaincode endorsement policy (LifecycleEndorsement Policy), before it can be used to interact with the ledger.
 	* It supports both centralized trust models (in v1.x previous lifecycle model) as well as decentralized models (in v2.0).
 	* New model allows for a chaincode to be upgraded only after sufficient number of organizations have approved theupgrade.
-	* Fabric lifecycle allows you to change an endorsement policy or private data collection configuration without having to repackage or reinstall the chaincode.
+	* Fabric lifecycle allows you to change an endorsement policy  or private data collection configuration without having to repackage or reinstall the chaincode.
 	* You can now use a single chaincode package and deploy it multiple times with different names on the same channel or on different channels.
 	* Chaincode packages do not need to be identical across channel members.
 
@@ -864,6 +900,12 @@
 
 
 
+### Importance of System Chaincodes ###
+	* It is possible for low level Fabric developers and administrators to modify these system chaincodes for their own uses.
+	* However, the development and management of system chaincodes is a specialized activity, quite separate from the development of smart contracts, and is not normally necessary.
+	* Changes to system chaincodes must be handled with extreme care as they are fundamental to the correct functioning of a Hyperledger Fabric network.
+	* For example, if a system chaincode is not developed correctly, one peer node may update its copy of the world state or blockchain differently compared to another peer node.
+	* This lack of consensus is one form of a ledger fork, a very undesirable situation.
 
 
 
@@ -971,4 +1013,9 @@
 			* It’s just a list of references to certificates that a CA knows to be revoked for one reason or another.
 			* When a third party(one org.) wants to verify another(other org.) party’s identity, it first checks the issuing CA’s CRL to make sure that the certificate has not been revoked. A verifier doesn’t have to check the CRL, but if they don’t they run the risk of accepting a compromised identity.
 			* Using a CRL to check that a certificate is still valid. If an impersonator tries to pass a compromised digital certificate to a validating party, it can be first checked against the issuing CA’s CRL to make sure it’s not listed as no longer valid.
+
+
+### Job of Smart Contract Developer ###
+	* The job of a smart contract developer is to take an existing business process that might govern financial prices or delivery conditions, and express it as a smart contract in a programming language such as JavaScript, Go, or Java.
+	* The legal and technical skills required to convert centuries of legal language into programming language is increasingly practiced by smart contract auditors.
 ###################################################################################################
